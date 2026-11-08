@@ -6,7 +6,7 @@
     <title>Advanced Dynamic Project Tracker</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <!-- React و ReactDOM از طریق cdnjs بدون خطای CORS -->
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <!-- Babel -->
@@ -17,9 +17,17 @@
 
     <script type="text/babel">
         function App() {
+            // بارگذاری ایمن داده‌ها با try/catch برای جلوگیری از خرابی JSON
             const [projects, setProjects] = React.useState(() => {
-                const saved = localStorage.getItem('tracker_projects_v3');
-                if (saved) return JSON.parse(saved);
+                try {
+                    const saved = localStorage.getItem('tracker_projects_v4');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    }
+                } catch (e) {
+                    console.error("Error parsing localStorage data:", e);
+                }
                 return [
                     {
                         id: 1,
@@ -42,7 +50,7 @@
                 ];
             });
 
-            const [selectedProjectId, setSelectedProjectId] = React.useState(projects[0]?.id || null);
+            const [selectedProjectId, setSelectedProjectId] = React.useState(() => projects[0]?.id || null);
             const [activeTab, setActiveTab] = React.useState('tracker');
             
             const [isAddProjectOpen, setIsAddProjectOpen] = React.useState(false);
@@ -61,10 +69,15 @@
             const [servAssignee, setServAssignee] = React.useState('');
 
             React.useEffect(() => {
-                localStorage.setItem('tracker_projects_v3', JSON.stringify(projects));
+                try {
+                    localStorage.setItem('tracker_projects_v4', JSON.stringify(projects));
+                } catch (e) {
+                    console.error("Error saving to localStorage:", e);
+                }
             }, [projects]);
 
-            const currentProject = projects.find(p => p.id === selectedProjectId) || projects[0];
+            // ایمن‌سازی انتخاب پروژه فعلی با چک کردن وجود آن
+            const currentProject = projects.find(p => p.id === selectedProjectId) || projects[0] || null;
 
             const calculateDelay = (deadline, forecast) => {
                 if (!deadline || !forecast) return 0;
@@ -88,11 +101,11 @@
 
             const handleAddProject = (e) => {
                 e.preventDefault();
-                if (!newProjName) return;
+                if (!newProjName.trim()) return;
                 const newProj = {
                     id: Date.now(),
-                    name: newProjName,
-                    logo: newProjLogo,
+                    name: newProjName.trim(),
+                    logo: newProjLogo || '📌',
                     team: ['Mahya', 'Team Member'],
                     services: []
                 };
@@ -104,17 +117,17 @@
 
             const handleSaveService = (e) => {
                 e.preventDefault();
-                if (!servTitle) return;
+                if (!servTitle.trim() || !currentProject) return;
 
                 const serviceData = {
                     id: editingService ? editingService.id : Date.now(),
-                    title: servTitle,
-                    description: servDesc,
+                    title: servTitle.trim(),
+                    description: servDesc.trim(),
                     status: servStatus,
                     deadline: servDeadline,
                     forecastDate: servForecast,
-                    reason: servReason,
-                    assignee: servAssignee || 'Team'
+                    reason: servReason.trim(),
+                    assignee: servAssignee.trim() || 'Team'
                 };
 
                 const updatedProjects = projects.map(proj => {
@@ -159,6 +172,7 @@
             };
 
             const handleDeleteService = (serviceId) => {
+                if (!currentProject) return;
                 const updatedProjects = projects.map(proj => {
                     if (proj.id === currentProject.id) {
                         return { ...proj, services: proj.services.filter(s => s.id !== serviceId) };
@@ -168,15 +182,31 @@
                 setProjects(updatedProjects);
             };
 
+            // اگر هیچ پروژه‌ای وجود نداشت، صفحه خالی کرش نکند و فرم ایجاد پروژه اولیه را نشان دهد
+            if (!currentProject) {
+                return (
+                    <div className="min-h-screen bg-slate-900 text-slate-100 p-8 flex flex-col items-center justify-center">
+                        <h2 className="text-xl font-bold mb-4">No Projects Found</h2>
+                        <button 
+                            onClick={() => setIsAddProjectOpen(true)}
+                            className="bg-indigo-600 px-4 py-2 rounded-xl text-white text-sm"
+                        >
+                            Create First Project
+                        </button>
+                    </div>
+                );
+            }
+
             return (
                 <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8">
+                    {/* هدر بالایی */}
                     <header className="flex flex-col md:flex-row justify-between items-center bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-700 mb-6 gap-4">
                         <div className="flex items-center gap-3">
-                            <span className="text-3xl bg-slate-700 p-2 rounded-xl">{currentProject?.logo || '📊'}</span>
+                            <span className="text-3xl bg-slate-700 p-2 rounded-xl">{currentProject.logo}</span>
                             <div>
                                 <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                                    {currentProject?.name}
-                                    <span className="text-xs bg-indigo-600 px-2 py-0.5 rounded-full text-indigo-100">Standalone Tracker</span>
+                                    {currentProject.name}
+                                    <span className="text-xs bg-indigo-600 px-2 py-0.5 rounded-full text-indigo-100">Safe Standalone Tracker</span>
                                 </h1>
                                 <p className="text-xs text-slate-400">Component-Based Dynamic Service Tracker</p>
                             </div>
@@ -217,6 +247,7 @@
                         </div>
                     </header>
 
+                    {/* محتوا */}
                     {activeTab === 'tracker' ? (
                         <main>
                             <div className="flex justify-between items-center mb-4">
@@ -230,7 +261,7 @@
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {currentProject?.services.map(service => {
+                                {currentProject.services.map(service => {
                                     const delayDays = calculateDelay(service.deadline, service.forecastDate);
                                     const flashlight = getFlashlight(service);
 
@@ -278,9 +309,9 @@
                                     );
                                 })}
 
-                                {currentProject?.services.length === 0 && (
+                                {currentProject.services.length === 0 && (
                                     <div className="col-span-full text-center py-12 bg-slate-800/50 border border-slate-700 rounded-2xl">
-                                        <p className="text-slate-400 text-sm">No services added yet.</p>
+                                        <p className="text-slate-400 text-sm">No services added yet for this project.</p>
                                     </div>
                                 )}
                             </div>
@@ -307,15 +338,90 @@
                                 </div>
                             </div>
 
-                            <table className="w-full text-left text-xs text-slate-300">
-                                <thead className="bg-slate-900 text-slate-400 uppercase">
-                                    <tr>
-                                        <th className="p-3">Service</th>
-                                        <th className="p-3">Assignee</th>
-                                        <th className="p-3">Status</th>
-                                        <th className="p-3">Deadline vs Forecast</th>
-                                        <th className="p-3">Calculated Delay</th>
-                                        <th className="p-3">Stop Reason</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-700">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs text-slate-300">
+                                    <thead className="bg-slate-900 text-slate-400 uppercase">
+                                        <tr>
+                                            <th className="p-3">Service</th>
+                                            <th className="p-3">Assignee</th>
+                                            <th className="p-3">Status</th>
+                                            <th className="p-3">Deadline vs Forecast</th>
+                                            <th className="p-3">Calculated Delay</th>
+                                            <th className="p-3">Stop Reason</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700">
+                                        {currentProject.services.map(s => {
+                                            const delay = calculateDelay(s.deadline, s.forecastDate);
+                                            return (
+                                                <tr key={s.id}>
+                                                    <td className="p-3 font-semibold text-white">{s.title}</td>
+                                                    <td className="p-3 text-indigo-300">{s.assignee}</td>
+                                                    <td className="p-3"><span className="px-2 py-0.5 rounded text-[10px] bg-slate-700">{s.status}</span></td>
+                                                    <td className="p-3">{s.deadline} → {s.forecastDate}</td>
+                                                    <td className="p-3 font-bold text-amber-400">{delay > 0 ? `${delay} Days` : '0 Days'}</td>
+                                                    <td className="p-3 text-slate-400 italic">{s.reason || 'None'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </main>
+                    )}
+
+                    {/* مودال پروژه */}
+                    {isAddProjectOpen && (
+                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6">
+                                <h3 className="text-lg font-bold text-white mb-4">New Project</h3>
+                                <form onSubmit={handleAddProject} className="space-y-4">
+                                    <input type="text" value={newProjName} onChange={(e) => setNewProjName(e.target.value)} placeholder="Project Name" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" required />
+                                    <input type="text" value={newProjLogo} onChange={(e) => setNewProjLogo(e.target.value)} placeholder="Logo Emoji" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" maxLength={2} />
+                                    <div className="flex justify-end gap-2">
+                                        <button type="button" onClick={() => setIsAddProjectOpen(false)} className="px-4 py-2 bg-slate-700 text-xs rounded-xl">Cancel</button>
+                                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-xs rounded-xl text-white">Create</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* مودال سرویس */}
+                    {isAddServiceOpen && (
+                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+                                <h3 className="text-lg font-bold text-white mb-4">{editingService ? 'Edit Service' : 'Add Service'}</h3>
+                                <form onSubmit={handleSaveService} className="space-y-4">
+                                    <input type="text" value={servTitle} onChange={(e) => setServTitle(e.target.value)} placeholder="Service Title" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" required />
+                                    <textarea value={servDesc} onChange={(e) => setServDesc(e.target.value)} placeholder="Capabilities description..." className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white h-20 resize-none" />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <select value={servStatus} onChange={(e) => setServStatus(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white">
+                                            <option value="In Progress">In Progress</option>
+                                            <option value="Stopped">Stopped</option>
+                                            <option value="Warning">Warning</option>
+                                            <option value="Completed">Completed</option>
+                                        </select>
+                                        <input type="text" value={servAssignee} onChange={(e) => setServAssignee(e.target.value)} placeholder="Assignee (e.g. Mahya)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <input type="date" value={servDeadline} onChange={(e) => setServDeadline(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+                                        <input type="date" value={servForecast} onChange={(e) => setServForecast(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+                                    </div>
+                                    <textarea value={servReason} onChange={(e) => setServReason(e.target.value)} placeholder="Stop reason / comment..." className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white h-16 resize-none" />
+                                    <div className="flex justify-end gap-2">
+                                        <button type="button" onClick={closeServiceModal} className="px-4 py-2 bg-slate-700 text-xs rounded-xl">Cancel</button>
+                                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-xs rounded-xl text-white">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
